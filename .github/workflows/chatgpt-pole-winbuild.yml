@@ -16,18 +16,18 @@ jobs:
           sudo apt-get install -y g++-mingw-w64-x86-64-posix unzip
       - name: Decode source
         run: |
-          cat \
-            .chatgpt-build/min.part000 \
-            .chatgpt-build/min.part001 \
-            .chatgpt-build/min.part002 \
-            .chatgpt-build/min.part003_0 \
-            .chatgpt-build/min.part003_1 \
-            .chatgpt-build/min.part003_2 \
-            .chatgpt-build/min.part003_3 \
-            .chatgpt-build/min.part004_0 \
-            .chatgpt-build/min.part004_1 \
-            .chatgpt-build/min.part004_2 \
-            | base64 -d > /tmp/pole.zip
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64
+          names = [
+            'min.part000','min.part001','min.part002',
+            'min.part003_0','min.part003_1','min.part003_2','min.part003_3',
+            'min.part004_0','min.part004_1','min.part004_2'
+          ]
+          data = ''.join(Path('.chatgpt-build', n).read_text() for n in names)
+          clean = ''.join(ch for ch in data if ch.isalnum() or ch in '+/=')
+          Path('/tmp/pole.zip').write_bytes(base64.b64decode(clean + '=' * ((4-len(clean)%4)%4), validate=False))
+          PY
           unzip -t /tmp/pole.zip
           mkdir /tmp/pole
           unzip -q /tmp/pole.zip -d /tmp/pole

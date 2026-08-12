@@ -16,17 +16,31 @@ jobs:
           sudo apt-get install -y g++-mingw-w64-x86-64-posix unzip
       - name: Decode source
         run: |
-          base64 -d .chatgpt-build/source.b64 > /tmp/pole.zip
+          cat \
+            .chatgpt-build/min.part000 \
+            .chatgpt-build/min.part001 \
+            .chatgpt-build/min.part002 \
+            .chatgpt-build/min.part003_0 \
+            .chatgpt-build/min.part003_1 \
+            .chatgpt-build/min.part003_2 \
+            .chatgpt-build/min.part003_3 \
+            .chatgpt-build/min.part004_0 \
+            .chatgpt-build/min.part004_1 \
+            .chatgpt-build/min.part004_2 \
+            | base64 -d > /tmp/pole.zip
+          unzip -t /tmp/pole.zip
           mkdir /tmp/pole
           unzip -q /tmp/pole.zip -d /tmp/pole
       - name: Build
         working-directory: /tmp/pole
         run: |
+          sed -i 's/-mwindows \\/-mwindows -municode \\/' build_windows_gamenative.sh
           chmod +x build_windows_gamenative.sh
           ./build_windows_gamenative.sh
           mkdir -p package
           cp dist/PolePosition_GameNative_RP5.exe package/
           cp RETROID_CONTROLS.txt package/
+          touch package/nascar.flag
           echo "Original ROM and BIOS are not bundled. Put your own files next to the EXE." > package/ROM_FILES_NOT_INCLUDED.txt
           sha256sum package/PolePosition_GameNative_RP5.exe > package/SHA256SUMS.txt
       - name: Upload artifact

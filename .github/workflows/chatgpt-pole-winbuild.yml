@@ -13,18 +13,35 @@ jobs:
       - name: Install MinGW
         run: |
           sudo apt-get update
-          sudo apt-get install -y g++-mingw-w64-x86-64-posix unzip
-      - name: Extract source
+          sudo apt-get install -y g++-mingw-w64-x86-64-posix unzip file
+      - name: Decode source
         run: |
-          unzip -t .chatgpt-build/pole_win_min.zip
+          cat \
+            .chatgpt-build/min.part000 \
+            .chatgpt-build/min.part001 \
+            .chatgpt-build/min.part002 \
+            .chatgpt-build/min.part003_0 \
+            .chatgpt-build/min.part003_1 \
+            .chatgpt-build/min.part003_2 \
+            .chatgpt-build/min.part003_3 \
+            .chatgpt-build/min.part004_0 \
+            .chatgpt-build/min.part004_1 \
+            .chatgpt-build/min.part004_2 \
+            > /tmp/pole.b64
+          test "$(wc -c < /tmp/pole.b64)" -eq 74012
+          base64 -d /tmp/pole.b64 > /tmp/pole.zip
+          echo "be5f916278672e2fc17f5952b8b75c11fededb5df8246c6a1f29fe5916b27cfc  /tmp/pole.zip" | sha256sum -c -
+          unzip -t /tmp/pole.zip
           mkdir /tmp/pole
-          unzip -q .chatgpt-build/pole_win_min.zip -d /tmp/pole
+          unzip -q /tmp/pole.zip -d /tmp/pole
       - name: Build
         working-directory: /tmp/pole
         run: |
           sed -i 's/-mwindows \\/-mwindows -municode \\/' build_windows_gamenative.sh
           chmod +x build_windows_gamenative.sh
           ./build_windows_gamenative.sh
+          file dist/PolePosition_GameNative_RP5.exe
+          x86_64-w64-mingw32-objdump -p dist/PolePosition_GameNative_RP5.exe | head -120
           mkdir -p package
           cp dist/PolePosition_GameNative_RP5.exe package/
           cp RETROID_CONTROLS.txt package/

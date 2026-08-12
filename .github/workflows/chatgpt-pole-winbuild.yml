@@ -1,0 +1,37 @@
+name: ChatGPT Pole Position Windows Build
+
+on:
+  push:
+    branches:
+      - chatgpt-pole-winbuild-20260812
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install MinGW
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++-mingw-w64-x86-64-posix unzip
+      - name: Decode source
+        run: |
+          base64 -d .chatgpt-build/source.b64 > /tmp/pole.zip
+          mkdir /tmp/pole
+          unzip -q /tmp/pole.zip -d /tmp/pole
+      - name: Build
+        working-directory: /tmp/pole
+        run: |
+          chmod +x build_windows_gamenative.sh
+          ./build_windows_gamenative.sh
+          mkdir -p package
+          cp dist/PolePosition_GameNative_RP5.exe package/
+          cp RETROID_CONTROLS.txt package/
+          echo "Original ROM and BIOS are not bundled. Put your own files next to the EXE." > package/ROM_FILES_NOT_INCLUDED.txt
+          sha256sum package/PolePosition_GameNative_RP5.exe > package/SHA256SUMS.txt
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PolePosition_GameNative_RP5_Windows_x86_64
+          path: /tmp/pole/package/
+          if-no-files-found: error

@@ -1,0 +1,98 @@
+name: SGDK Mahjong Duel v0.8 - grouped hands, stable cursor
+on:
+  push:
+    branches: [chatgpt-mahjong-sgdk-v08]
+jobs:
+  compile-and-emulate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Restore and patch SGDK project
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -xJf mahjong-build/source.tar.xz
+          base64 -d mahjong-build/v08.patch.gz.b64 | gzip -dc | patch -p1 --batch --forward
+          grep -q 'MAJ_sortForRuns' src/mahjong.c
+          grep -q 'handCursorX' src/main.c
+      - name: Install compiler and emulator
+        run: npm install --no-save --ignore-scripts romdev-toolchain-m68k-gcc@0.4.2 romdev-core-gpgx@0.15.2 romdev-core-host@0.14.1 pngjs@7.0.0
+      - name: Compile real Genesis ROM using SGDK toolchain
+        run: |
+          node --input-type=module <<'NODE'
+          import {readFileSync,writeFileSync} from 'node:fs';
+          import {buildGenesisC,finalizeGenesisRom} from 'romdev-toolchain-m68k-gcc';
+          const result=await buildGenesisC({
+            sources: {'main.c':readFileSync('src/main.c','utf8'),'mahjong.c':readFileSync('src/mahjong.c','utf8')},
+            headers: {'mahjong.h':readFileSync('inc/mahjong.h','utf8'),'tile_art.h':readFileSync('inc/tile_art.h','utf8')},
+            sgdk:true
+          });
+          console.log(result.log);
+          if(!result.ok||!result.binary) throw new Error('Real SGDK build failed at '+result.stage);
+          const rom=finalizeGenesisRom(result.binary);
+          writeFileSync('Mahjong_Duel_DO7OO_SGDK_v08.bin',rom);
+          console.log('ROM bytes',rom.length);
+          NODE
+          sha256sum Mahjong_Duel_DO7OO_SGDK_v08.bin
+      - name: Test ROM in real Genesis Plus GX emulator
+        run: |
+          mkdir -p emulator-proof
+          node --input-type=module <<'NODE'
+          import {LibretroHost} from 'romdev-core-host';
+          import * as core from 'romdev-core-gpgx';
+          import {PNG} from 'pngjs';
+          import {writeFileSync} from 'node:fs';
+          const host=new LibretroHost();
+          await host.loadCore(core.core.jsPath,core.core.wasmPath);
+          await host.loadMedia({platform:'genesis',path:'Mahjong_Duel_DO7OO_SGDK_v08.bin'});
+          const snap=(name)=>{
+            const shot=host.screenshot();
+            writeFileSync('emulator-proof/'+name+'.png',Buffer.from(shot.pngBase64,'base64'));
+            console.log('SNAP',name,shot.width,shot.height,host.framebufferHash());
+            return PNG.sync.read(Buffer.from(shot.pngBase64,'base64'));
+          };
+          host.stepFrames(90);
+          snap('01_title');
+          host.setInput({ports:[{start:true}]});host.stepFrames(4);
+          host.setInput({ports:[{}]});host.stepFrames(100);
+          const before=snap('02_started');
+          const compare=(a,b,tag)=>{
+            if(a.width!==b.width||a.height!==b.height)throw Error('Frame size mismatch');
+            let outside=0,inside=0;
+            for(let y=0;y<a.height;y++)for(let x=0;x<a.width;x++){
+              const o=(y*a.width+x)*4;
+              if(a.data[o]!==b.data[o]||a.data[o+1]!==b.data[o+1]||a.data[o+2]!==b.data[o+2]) {
+                if(y>=192&&y<200)inside++;else outside++;
+              }
+            }
+            console.log('CURSOR DIFF',tag,{inside,outside});
+            if(outside>0)throw Error('Cursor changed pixels outside selector row: '+outside);
+            return inside;
+          };
+          host.setInput({ports:[{right:true}]});host.stepFrames(2);
+          host.setInput({ports:[{}]});host.stepFrames(4);
+          const right=snap('03_cursor_right');
+          if(compare(before,right,'right')<2)throw Error('Cursor did not move');
+          host.stepFrames(15);
+          compare(right,snap('04_idle_stable'),'idle');
+          host.setInput({ports:[{left:true}]});host.stepFrames(2);
+          host.setInput({ports:[{}]});host.stepFrames(4);
+          compare(before,snap('05_cursor_left'),'back');
+          host.setInput({ports:[{c:true}]});host.stepFrames(3);
+          host.setInput({ports:[{}]});host.stepFrames(80);
+          snap('06_after_discard');
+          console.log('EMULATOR STATUS',JSON.stringify(host.getStatus()));
+          NODE
+      - name: Upload verified ROM and emulator screenshots
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: Mahjong-Duel-DO7OO-SGDK-v08-verified-ROM
+          path: |
+            Mahjong_Duel_DO7OO_SGDK_v08.bin
+            emulator-proof/*.png
+          if-no-files-found: error

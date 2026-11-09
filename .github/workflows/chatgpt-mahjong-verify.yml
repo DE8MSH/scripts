@@ -1,0 +1,64 @@
+name: Verify Mahjong ROM in Genesis Plus GX
+on:
+  push:
+    branches: [chatgpt-mahjong-sgdk-verify]
+jobs:
+  emulate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Download compiled SGDK ROM
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download 42601497526 -n Mahjong-Duel-DO7OO-SGDK-fast-ROM -D .
+          ls -lh Mahjong_Duel_DO7OO_SGDK_v07.bin
+      - name: Install real Genesis emulator
+        run: npm install --no-save --ignore-scripts romdev-core-gpgx@0.15.2 romdev-core-host@0.14.1
+      - name: Test game start and controller using Genesis Plus GX
+        run: |
+          mkdir -p emulator-proof
+          node --input-type=module <<'NODE'
+          import { LibretroHost } from 'romdev-core-host';
+          import * as core from 'romdev-core-gpgx';
+          import { writeFileSync } from 'node:fs';
+          const host = new LibretroHost();
+          await host.loadCore(core.core.jsPath, core.core.wasmPath);
+          await host.loadMedia({platform:'genesis',path:'Mahjong_Duel_DO7OO_SGDK_v07.bin'});
+          const snap = (name) => {
+            const shot = host.screenshot();
+            writeFileSync('emulator-proof/'+name+'.png',Buffer.from(shot.pngBase64,'base64'));
+            console.log('SNAPSHOT',name,shot.width,shot.height,host.framebufferHash());
+          };
+          host.stepFrames(120);
+          snap('01_title');
+          host.setInput({ports:[{start:true}]});
+          host.stepFrames(4);
+          host.setInput({ports:[{}]});
+          host.stepFrames(100);
+          snap('02_started');
+          host.setInput({ports:[{right:true}]});
+          host.stepFrames(3);
+          host.setInput({ports:[{}]});
+          host.stepFrames(5);
+          snap('03_selected');
+          host.setInput({ports:[{a:true}]});
+          host.stepFrames(3);
+          host.setInput({ports:[{}]});
+          host.stepFrames(100);
+          snap('04_after_A');
+          console.log('STATUS',JSON.stringify(host.getStatus()));
+          NODE
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Mahjong-SGDK-GenesisPlusGX-test
+          path: emulator-proof/
+          if-no-files-found: ignore

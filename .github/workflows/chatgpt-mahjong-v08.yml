@@ -82,9 +82,13 @@ jobs:
           host.setInput({ports:[{left:true}]});host.stepFrames(2);
           host.setInput({ports:[{}]});host.stepFrames(4);
           compare(before,snap('05_cursor_left'),'back');
-          host.setInput({ports:[{c:true}]});host.stepFrames(3);
+          host.setInput({ports:[{a:true}]});host.stepFrames(3);
           host.setInput({ports:[{}]});host.stepFrames(80);
-          snap('06_after_discard');
+          const after=snap('06_after_discard');
+          let change=0;
+          for(let i=0;i<before.data.length;i+=4)if(before.data[i]!==after.data[i]||before.data[i+1]!==after.data[i+1]||before.data[i+2]!==after.data[i+2])change++;
+          console.log('DISCARD CHANGE PIXELS',change);
+          if(change<100)throw Error('Genesis C did not discard the selected tile');
           console.log('EMULATOR STATUS',JSON.stringify(host.getStatus()));
           NODE
       - name: Upload verified ROM and emulator screenshots

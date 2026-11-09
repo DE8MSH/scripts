@@ -1,0 +1,49 @@
+name: Fast SGDK Mahjong ROM Build
+on:
+  push:
+    branches: [chatgpt-mahjong-sgdk-fast]
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Expand project
+        run: tar -xJf mahjong-build/source.tar.xz
+      - name: Install WASM Motorola 68000 compiler with SGDK
+        run: npm install --no-save --ignore-scripts romdev-toolchain-m68k-gcc@0.4.2
+      - name: Compile and checksum the ROM with SGDK startup
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from 'node:fs';
+          import { buildGenesisC, finalizeGenesisRom } from 'romdev-toolchain-m68k-gcc';
+          const r = await buildGenesisC({
+            sources: {
+              "main.c": readFileSync("src/main.c", "utf8"),
+              "mahjong.c": readFileSync("src/mahjong.c", "utf8")
+            },
+            headers: {
+              "mahjong.h": readFileSync("inc/mahjong.h", "utf8"),
+              "tile_art.h": readFileSync("inc/tile_art.h", "utf8")
+            },
+            sgdk: true
+          });
+          console.log(r.log);
+          if (!r.ok || !r.binary) {
+            console.error("ROM compilation failed at stage", r.stage);
+            process.exit(1);
+          }
+          const binary = finalizeGenesisRom(r.binary);
+          writeFileSync("Mahjong_Duel_DO7OO_SGDK_v07.bin", binary);
+          console.log("ROM bytes:", binary.length);
+          NODE
+          sha256sum Mahjong_Duel_DO7OO_SGDK_v07.bin
+      - name: Upload ROM
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mahjong-Duel-DO7OO-SGDK-fast-ROM
+          path: Mahjong_Duel_DO7OO_SGDK_v07.bin
+          if-no-files-found: error

@@ -1,0 +1,37 @@
+name: Build Mahjong Duel SGDK ROM
+on:
+  push:
+    branches: [chatgpt-mahjong-sgdk-build]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 80
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install host dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential bison bzip2 flex git texinfo xz-utils default-jre-headless libpng-dev unzip curl wget libzstd-dev
+      - name: Unpack v0.6 SGDK source
+        run: |
+          tar -xJf mahjong-build/source.tar.xz
+          ls -la src inc
+      - name: Install native SGDK cross-compiler and SDK
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/tlsa/sgdk-helper/main/sgdk-helper.sh -o sgdk-helper.sh
+          chmod +x sgdk-helper.sh
+          ./sgdk-helper.sh toolchain
+          ./sgdk-helper.sh deps
+      - name: Compile ROM
+        run: |
+          ./sgdk-helper.sh rom
+          test -s out/rom.bin
+          cp out/rom.bin Mahjong_Duel_DO7OO_SGDK_v07.bin
+          sha256sum Mahjong_Duel_DO7OO_SGDK_v07.bin
+      - name: Upload playable Mega Drive ROM
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mahjong-Duel-DO7OO-SGDK-v07
+          path: Mahjong_Duel_DO7OO_SGDK_v07.bin
+          if-no-files-found: error
